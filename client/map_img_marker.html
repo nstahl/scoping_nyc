@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+	<title>Map</title>
+	<script type="text/javascript" src="javascripts/jquery.min.js"></script>
+	<script type="text/javascript" src="javascripts/bootstrap.min.js"></script>
+	<link href="stylesheets/bootstrap.css" rel="stylesheet" type="text/css" />
+	<script src='http://api.tiles.mapbox.com/mapbox.js/v0.6.7/mapbox.js'></script>
+	<link href='http://api.tiles.mapbox.com/mapbox.js/v0.6.7/mapbox.css' rel='stylesheet'/>
+    <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { margin:0; padding:0; }
+    .thumb { width:40px; height:40px; }
+    #placeholder { background: grey;position:absolute; top:0; bottom:0; width:400px; height:800px; }
+    #map { position:absolute; top:0; bottom:0; width:500px; height:800px; }
+    
+    .marker-image {
+    width:20;
+    height:20px;
+    opacity:.3;
+    margin-left:-10px;
+    margin-top:-10px;
+    pointer-events:all;
+    position:absolute;
+    }
+
+  </style>
+</head>
+<body>
+
+<div class='container'>
+	<div class="row">
+		<div class="span6">
+			<div id='map'>
+
+<a href="#" class="zoomer zoomin">+</a>
+<a href="#" class="zoomer zoomout">-</a>
+            </div>
+		</div>
+		<div class="offset1 span5">
+			<div class="container" id='placeholder'>  </div>
+		</div>
+	</div>
+</div>
+
+
+<script>
+
+
+    var initSocket = function() {
+        socket = io.connect();
+        
+        //listen for twitter stream
+        socket.on('tweet', function (data) { 
+            //normalize
+            //console.log(data);
+            var featureObj = {};
+            featureObj["geometry"] = {"type": "Point", 
+                               "coordinates": [  data["lon"], data["lat"] ]};
+            featureObj["properties"] = { "text": data["text"], 
+                                        "img" : "http://www.segerman.org/pics/duijvestijn_square.png" };
+
+
+            addTweet(featureObj);
+        });
+        
+
+    };
+
+
+    var addTweet = function(obj) {
+
+        console.log(obj);
+
+        //add to img stream
+        $('#placeholder').append('<img class="thumb" src="http://www.segerman.org/pics/duijvestijn_square.png">');
+        //'<img src="' + feature.properties.image + '">'
+        //add to map
+        markerLayer.add_feature(obj);
+
+    };
+
+    /*
+    //add d3 to the map
+    function d3layer() {
+    var f = {}, bounds, feature, collection;
+    var div = d3.select(document.body)
+        .append("div")
+        .attr('class', 'd3-vec'),
+        svg = div.append('svg'),
+        g = svg.append("g");
+
+    f.parent = div.node();
+
+    f.project = function(x) {
+      var point = f.map.locationPoint({ lat: x[1], lon: x[0] });
+      return [point.x, point.y];
+    };
+
+    var first = true;
+    f.draw = function() {
+      first && svg.attr("width", f.map.dimensions.x)
+          .attr("height", f.map.dimensions.y)
+          .style("margin-left", "0px")
+          .style("margin-top", "0px") && (first = false);
+
+      path = d3.geo.path().projection(f.project);
+      feature.attr("d", path);
+    };
+
+    f.data = function(x) {
+        collection = x;
+        bounds = d3.geo.bounds(collection);
+        feature = g.selectAll("path")
+            .data(collection.features)
+            .enter().append("path");
+        return f;
+    };
+
+    f.extent = function() {
+        return new MM.Extent(
+            new MM.Location(bounds[0][1], bounds[0][0]),
+            new MM.Location(bounds[1][1], bounds[1][0]));
+    };
+    return f;
+    }
+    */
+
+
+
+    var socket;
+    initSocket();
+
+
+    // GeoJSON input features
+    // The image and url properties of the features will be used in
+    // the tooltips
+    /*
+    var protoObj = {
+        "geometry": { "type": "Point", "coordinates": [-74.00, 40.71]},
+        "properties": {
+            "text": "New York City"
+        }};
+    */
+
+    //var features = [];
+    // Create map
+    var map = mapbox.map('map');
+    map.addLayer(mapbox.layer().id('nstahl.map-3j9bqh9j'));
+
+
+    // Create and add marker layer
+    var markerLayer = mapbox.markers.layer();
+
+    //add custom marker
+    markerLayer.factory(function(f) {
+    // Define a new factory function. This takes a GeoJSON object
+    // as its input and returns an element - in this case an image -
+    // that represents the point.
+        var img = document.createElement('img');
+        img.className = 'marker-image';
+        img.setAttribute('src', '/data/square.jpg');
+        return img;
+    });
+
+    var interaction = mapbox.markers.interaction(markerLayer);
+    map.addLayer(markerLayer);
+    map.ui.zoomer.add();
+
+    interaction.formatter(function(feature) {
+    var o = 
+        '<p>' + feature.properties.text + '</p>';
+
+    return o;
+    });
+
+    // Set iniital center and zoom
+    map.centerzoom({
+    	//40.7142° N, 74.0064
+        lat: 40.7642,
+        lon: -73.980
+    }, 12);
+
+</script>
+
+
+</body>
+</html>

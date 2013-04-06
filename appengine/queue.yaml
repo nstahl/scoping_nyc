@@ -1,0 +1,5 @@
+total_storage_limit: 100M
+queue:
+- name: default
+  rate: 15/h
+  bucket_size: 1

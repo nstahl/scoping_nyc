@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+	<title>Map</title>
+	<script type="text/javascript" src="javascripts/jquery.min.js"></script>
+	<script type="text/javascript" src="javascripts/bootstrap.min.js"></script>
+	<link href="stylesheets/bootstrap.css" rel="stylesheet" type="text/css" />
+	<script src='http://api.tiles.mapbox.com/mapbox.js/v0.6.7/mapbox.js'></script>
+	<link href='http://api.tiles.mapbox.com/mapbox.js/v0.6.7/mapbox.css' rel='stylesheet'/>
+    <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
+  <style>
+
+    body { 
+        margin-top:50px;
+        padding:20px; 
+        background: black;
+    }
+    .thumb { 
+        width:100px; 
+        height:100px;
+        opacity:1;
+        position:absolute;
+        display:none;
+    }
+     .text { 
+        opacity:1;
+    }
+    #placeholder { 
+        background: black;
+        top:0; 
+        bottom:0;
+        position:relative;
+        width:560px; 
+        height:800px; 
+    }
+    #map { 
+        top:0; 
+        bottom:0; 
+        width:500px; 
+        height:800px; 
+    }
+    .marker-image {
+        width:20;
+        height:20px;
+        opacity:.5;
+        margin-left:-10px;
+        margin-top:-10px;
+        pointer-events:all;
+        position:absolute;
+        display:none;
+        box-shadow: 0px 0px 10px #fff;
+    }
+
+  </style>
+</head>
+<body>
+
+
+
+
+<div class='container'>
+    <input id="address" type="textbox" value="Sydney, NSW" style="display:none;">
+    <input type="button" value="Geocode" onclick="codeAddress()" style="display:none;"> 
+
+    <div class="row">
+    <h4 class="text" id="postText">HELLO</h4>
+    </div>
+	<div class="row">
+		<div class="span6">
+			<div id='map'>
+                <a href="#" class="zoomer zoomin">+</a>
+                <a href="#" class="zoomer zoomout">-</a>
+            </div>
+		</div>
+		<div class="offset1 span5" >
+			<div id='placeholder' >  </div>
+		</div>
+	</div>
+</div>
+
+
+<script>
+    
+    var normalizeTweet = function (data) { 
+            console.log(data);
+            //normalize
+            var featureObj = {};
+            featureObj["geometry"] = {"type": "Point", 
+                               "coordinates": [  parseFloat(data["lon"]), parseFloat(data["lat"]) ]};
+            featureObj["properties"] = { "text": data["text"], 
+                                        "img" : data["high"] };
+            var _id = '' + tweetCounter;
+            tweets.push( {'featureObj': featureObj, '_id':  _id} );
+            tweetCounter++;
+            var tweetTime = parseInt(data["created"]);
+            if (tweetTime>latestImageTime){
+                latestImageTime = tweetTime;
+                console.log("Updated Latest Time: " + latestImageTime);
+            }
+    };
+
+    var handleMouseIn = function() {
+        $("#postText").text(textHash[$(this)[0].id]);
+    };
+
+    var handleMouseOut = function() {
+        //$("#postText").text("");
+    };
+
+    var addImage = function(imgId, srcUrl, x, y, delta) {
+        var imgTag = $('<img />').appendTo('#placeholder');
+        imgTag.attr('id', imgId);
+        imgTag.attr('class', 'thumb');
+        imgTag.attr('src', srcUrl);
+        imgTag.css('left', x);
+        imgTag.css('top', y);
+
+        imgTag.hover( handleMouseIn, handleMouseOut );
+
+        imgTag.fadeIn(delta, function() { });
+    };
+
+    var changeImage = function(imgId, newUrl, delta) {
+        console.log("Chaning image to " + newUrl );
+        var imgTag = $('#' + imgId);
+        imgTag.fadeOut(delta, function() { 
+            imgTag.attr('src', newUrl);
+            imgTag.fadeIn(delta);
+        });
+    };
+
+    getTileToChange = function() {
+        //find oldest tile
+        //random choice
+        //var deltaI = Math.floor(xTiles*Math.random());
+        //var deltaJ = Math.floor(yTiles*Math.random());
+        //var deltaId = 't_' + deltaI + '_'+  deltaJ;
+
+        return getOldestTileId();
+    }
+
+    var addTweet = function(obj, _id) {
+
+        //add to img stream
+        var markerId = 'm_' + _id;
+        var deltaId = getTileToChange();
+
+
+        textHash[deltaId] = obj["properties"]["text"];
+
+        changeImage(deltaId, obj["properties"]["img"], 1000);
+
+        //addmarker layer
+        //add custom marker
+        // Create and add marker layer
+        var markerLayer = mapbox.markers.layer();
+
+        markerLayer.factory(function(f) {
+            var img = document.createElement('img');
+            img.id = markerId;
+            img.className = 'marker-image';
+            img.setAttribute('src', '/data/square.jpg');
+            
+            return img;
+        });
+
+        var interaction = mapbox.markers.interaction(markerLayer);
+        interaction.formatter(function(feature) {
+        var o = 
+            '<p>' + feature.properties.text + '</p>';
+
+        return o;
+        });
+
+        map.addLayer(markerLayer);
+        markerLayer.add_feature(obj);
+
+        $('#' + markerId).fadeIn(800, function() {
+
+        });
+
+        var toDelete = tileTable[ deltaId ][ 'markerLayer' ];
+        //if exists, fade out previous marker
+        if ('markerId' in tileTable[ deltaId ]) {
+
+            $('#' + tileTable[ deltaId ][ 'markerId' ]).fadeOut(800, function() {
+                
+                //tileTable[ deltaId ][ 'markerLayer' ] might be pointing somewhere else
+                map.removeLayer(toDelete);
+            
+            });
+           
+        }
+
+        //keep track
+        markerLayers.push(markerLayer);
+
+        tileTable[ deltaId ][ 'markerLayer' ] = markerLayer;
+        tileTable[ deltaId ][ 'markerId' ] = markerId;
+        tileTable[ deltaId ][ 'shownAt' ] = (new Date).getTime();
+        tileTable[ deltaId ][ 'src' ] = srcUrl;
+        tileTable[ deltaId ][ 'tileId' ] = deltaId;
+
+
+
+    };
+
+    function getOldestTileId() {
+
+        var sortable = [];
+        for (var tileId in tileTable)
+            sortable.push([ tileId, tileTable[tileId]['shownAt'] ])
+
+        sortable.sort(function(a, b) {return a[1] - b[1]});
+
+        return sortable[0][0];
+
+    }
+
+    function codeAddress() {
+        var address = document.getElementById('address').value;
+        geocoder.geocode( { 'address': address}, function(results, status) {
+          if (status == google.maps.GeocoderStatus.OK) {
+            //console.log(results[0]);
+            //console.log(results[0].geometry.location);
+            map.center({'lat': results[0].geometry.location['ib'], 
+                        'lon': results[0].geometry.location['jb']
+                        });
+            changeTweetBoundingBox();
+
+
+          } else {
+            alert('Geocode was not successful for the following reason: ' + status);
+          }
+        });
+      }
+
+
+    function addTweets() { 
+        //console.log("Adding new batch *******************");
+        var addInterval = requestInterval / tweets.length ;
+
+        tweets.forEach( function(tweetObj, i) {
+            console.log(tweetObj);
+            //console.log(i);
+            //console.log(tweetObj["featureObj"]['properties']['text']);
+            setTimeout(function(){
+                //console.log(tweetObj);
+                addTweet( tweetObj["featureObj"], tweetObj["_id"] );
+            }, i*addInterval);
+            
+        });
+        tweets = [];
+    }
+
+    function makeRequest() {
+        
+
+
+        var currentSnapcityUrl = snapcityUrl + "&lb=" + simObj["currLB"];
+        currentSnapcityUrl += ("&ub=" +  (simObj["currLB"]+simObj["stepSize"]));
+        console.log("Calling: " + currentSnapcityUrl);
+
+        //update
+        simObj["currLB"] += simObj["stepSize"];
+
+        jQuery(document).ready(function($) {
+          $.ajax({
+          url : currentSnapcityUrl,
+          dataType : "json",
+          success : function(parsed_json) {
+
+            parsed_json["results"].forEach( function(result){
+                console.log(result);
+                normalizeTweet(result);
+            });
+            addTweets();
+          }
+          });
+        });
+
+
+        
+    }
+
+
+    ////////////////////////////////////////////////////////////
+    //////////////////////GLOBAL VARIABLES//////////////////////
+    ////////////////////////////////////////////////////////////
+
+    var simObj = {};
+    simObj["startTime"] = 1362300296;
+    simObj["stepSize"] = 5*60;
+    simObj["currLB"] = simObj["startTime"];
+
+
+    var snapcityUrl = "http://snapcity22.appspot.com/query?loc=newyork";
+
+    var tileTable = {};
+    var latestImageTime = 0;
+
+    var requestInterval = 60000;
+    var tweetCounter = 0;
+    var tweets = [];
+    var srcUrl = "http://www.iconsdb.com/icons/preview/black/square-xxl.png";
+    var stepSize = 100;
+    var xTiles = 4;
+    var yTiles = 8;
+    //setup img tiling
+
+    var textHash = {};
+
+    for (var i=0; i<xTiles; i++) {
+        for (var j=0; j<yTiles; j++) {
+            var id_str = 't_'+i+'_'+j;
+            textHash[id_str] = "No text";
+            tileTable[ id_str ] = {'shownAt': (new Date).getTime()+(yTiles*i+j) };
+            addImage(id_str, srcUrl, stepSize*i, stepSize*j, 100*(i+j*xTiles));
+        }
+    }
+    
+
+    // Create map
+    var map = mapbox.map('map');
+    map.addLayer(mapbox.layer().id('nstahl.map-3j9bqh9j'));
+
+    var markerLayers = [];
+
+    map.ui.zoomer.add();
+    // Set iniital center and zoom
+    map.centerzoom({
+        lat: 40.7642,
+        lon: -73.980
+    }, 12);
+
+    //geocoder
+    var geocoder = new google.maps.Geocoder();
+
+    makeRequest();
+    setInterval(makeRequest, requestInterval);
+
+</script>
+
+
+</body>
+</html>
